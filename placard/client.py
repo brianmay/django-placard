@@ -20,7 +20,7 @@ from django.conf import settings
 from django.template.defaultfilters import dictsort
 
 import os
-import ldap
+import placard.tldap as ldap
 import ldap.modlist as modlist
 try:
     import smbpasswd
@@ -50,22 +50,11 @@ ldap_attrs = __import__(settings.LDAP_ATTRS, {}, {}, [''])
 class LDAPClient(object):
 
     def __init__(self, 
-                 url=settings.LDAP_URL, 
-                 username=settings.LDAP_ADMIN_USER, 
-                 password=settings.LDAP_ADMIN_PASSWORD,
                  base=settings.LDAP_BASE,
                  user_base=settings.LDAP_USER_BASE,
                  group_base=settings.LDAP_GROUP_BASE):
 
-        l = ldap.initialize(url) 
-        l.protocol_version = ldap.VERSION3
-
-        if LDAP_USE_TLS:
-            l.set_option(ldap.OPT_X_TLS, ldap.OPT_X_TLS_DEMAND)
-            l.start_tls_s()
-
-        l.simple_bind_s(username, password)
-        self.conn = l
+        self.conn = ldap.connection
 
         self.base = base
         self.user_base = user_base
