@@ -33,33 +33,25 @@ from placard import exceptions
 from placard.lusers.models import LDAPUser
 from placard.lgroups.models import LDAPGroup
 
-
-if hasattr(settings, 'LDAP_USE_TLS'):
-    LDAP_USE_TLS = settings.LDAP_USE_TLS
-else:
-    LDAP_USE_TLS = False
-
-if LDAP_USE_TLS:
-    ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, settings.LDAP_TLS_CA)
-
-
 ldap_attrs = __import__(settings.LDAP_ATTRS, {}, {}, [''])
-
-
 
 class LDAPClient(object):
 
-    def __init__(self, 
-                 base=settings.LDAP_BASE,
-                 user_base=settings.LDAP_USER_BASE,
-                 group_base=settings.LDAP_GROUP_BASE):
-
+    def __init__(self):
         self.conn = ldap.connection
 
-        self.base = base
-        self.user_base = user_base
-        self.group_base = group_base
-    
+        s = ldap.connection.settings_dict
+        try:
+            # try using new config
+            self.base = s['BASE']
+            self.user_base = s['USER_BASE']
+            self.group_base = s['GROUP_BASE']
+        except KeyError:
+            # if that fails, fall back to old system
+            self.base = settings.LDAP_BASE
+            self.user_base = settings.LDAP_USER_BASE
+            self.group_base = settings.LDAP_GROUP_BASE
+
     def __del__(self):
         self.conn.unbind_s()
 
