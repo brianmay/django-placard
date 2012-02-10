@@ -27,6 +27,9 @@ import unittest
 from placard.server import slapd
 from placard.client import LDAPClient
 from placard.misc.test_data import test_ldif
+from placard.tldap import transaction
+from placard import exceptions
+import ldap
 
 server = None
 
@@ -47,34 +50,42 @@ class UserAPITest(unittest.TestCase):
         self.server.stop()
 
 
+    @transaction.commit_on_success()
     def test_get_users(self):
         c = LDAPClient()
         self.failUnlessEqual(len(c.get_users()), 3)
         
+    @transaction.commit_on_success()
     def test_get_user(self):
         c = LDAPClient()      
         u = c.get_user('uid=testuser3')
         self.failUnlessEqual(u.mail, 't.user3@example.com')
                              
+    @transaction.commit_manually()
     def test_delete_user(self):
         c = LDAPClient()
         self.failUnlessEqual(len(c.get_users()), 3)
         c.delete_user('uid=testuser2')
+        c.commit()
         self.failUnlessEqual(len(c.get_users()), 2)
                 
+    @transaction.commit_on_success()
     def test_in_ldap(self):
         c = LDAPClient()
         self.assertTrue(c.in_ldap('uid=testuser1'))
         self.assertFalse(c.in_ldap('uid=testuser4'))
         
+    @transaction.commit_on_success()
     def test_update_user(self):
         c = LDAPClient()
         u = c.get_user('uid=testuser1')
         self.failUnlessEqual(u.sn, 'User')  
         c.update_user('uid=%s' % u.uid, sn='Bloggs')
+        c.commit()
         u = c.get_user('uid=testuser1')
         self.failUnlessEqual(u.sn, 'Bloggs')
 
+    @transaction.commit_on_success()
     def test_update_user_no_modifications(self):
         c = LDAPClient()
         u = c.get_user('uid=testuser1')
@@ -83,33 +94,97 @@ class UserAPITest(unittest.TestCase):
         u = c.get_user('uid=testuser1')
         self.failUnlessEqual(u.sn, 'User')
 
+    @transaction.commit_manually()
     def test_lock_unlock(self):
         c = LDAPClient()
         self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
         c.lock_user('uid=testuser1')
+        c.commit()
         self.failUnlessEqual(c.is_locked('uid=testuser1'), True)
         c.unlock_user('uid=testuser1')
+        c.commit()
         self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
 
+    @transaction.commit_on_success()
     def test_user_search(self):
         c = LDAPClient()
         users = c.search_users(['User',])
         self.failUnlessEqual(len(users), 3)
 
+    @transaction.commit_on_success()
     def test_user_search_one(self):
         c = LDAPClient()
         users = c.search_users(['testuser1',])
         self.failUnlessEqual(len(users), 1)
 
+    @transaction.commit_on_success()
     def test_user_search_empty(self):
         c = LDAPClient()
         users = c.search_users(['nothing',])
         self.failUnlessEqual(len(users), 0)
 
+    @transaction.commit_on_success()
     def test_user_search_multi(self):
         c = LDAPClient()
         users = c.search_users(['test', 'user'])
         self.failUnlessEqual(len(users), 3)
+
+    def test_transactions(self):
+        c = LDAPClient()
+        rdn = getattr(settings, 'LDAP_USER_RDN', 'uid')
+
+        # test explicit roll back
+        with transaction.commit_on_success():
+            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+#            c.update_user("uid=tux", sn="Gates")
+            c.rollback()
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
+
+        # test roll back on exception
+        try:
+            with transaction.commit_on_success():
+                c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+#                c.update_user("uid=tux", sn="Gates")
+                raise RuntimeError("testing failure")
+        except RuntimeError:
+            pass
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
+
+        # test success commits
+        with transaction.commit_on_success():
+            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+#            c.update_user("uid=tux", sn="Gates")
+        self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
+
+        c.update_user("uid=tux", sn="Gates")
+
+        # test success when 3rd statement fails; need to roll back 2nd and 1st statements
+        with transaction.commit_on_success():
+            c.update_user("uid=tux", sn="Milkshakes")
+            c.update_user("uid=tux", sn="Bannas")
+            # next statement will fail when executed because tux already exists
+            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+            self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
+
+        # test roll back on error of delete and add of same user
+        with transaction.commit_on_success():
+            c.delete_user("uid=tux")
+            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+            c.add_user(uid="testuser1", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+            self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
+
+        # test delate and add same user
+        with transaction.commit_on_success():
+            c.delete_user("uid=tux")
+            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+        self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
+
+        # test delate
+        with transaction.commit_on_success():
+            c.delete_user("uid=tux")
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
         
         
 class UserViewsTests(TestCase):
