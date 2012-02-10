@@ -52,9 +52,6 @@ class LDAPClient(object):
             self.user_base = settings.LDAP_USER_BASE
             self.group_base = settings.LDAP_GROUP_BASE
 
-    def __del__(self):
-        self.conn.unbind_s()
-
 
     def ldap_add(self, dn, attrs):
         ldif = modlist.addModlist(attrs)
