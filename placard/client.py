@@ -529,3 +529,9 @@ class LDAPClient(object):
         filter += ')'
         return self.get_users(filter)
 
+    def commit(self):
+        return self.conn.commit()
+
+    def rollback(self):
+        return self.conn.rollback()
+
