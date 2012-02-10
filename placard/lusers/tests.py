@@ -161,7 +161,9 @@ class UserAPITest(unittest.TestCase):
         # test success when 3rd statement fails; need to roll back 2nd and 1st statements
         with transaction.commit_on_success():
             c.update_user("uid=tux", sn="Milkshakes")
+            self.assertEqual(c.get_user("uid=tux").sn, "Milkshakes")
             c.update_user("uid=tux", sn="Bannas")
+            self.assertEqual(c.get_user("uid=tux").sn, "Bannas")
             # next statement will fail when executed because tux already exists
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
             self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
@@ -170,6 +172,7 @@ class UserAPITest(unittest.TestCase):
         # test roll back on error of delete and add of same user
         with transaction.commit_on_success():
             c.delete_user("uid=tux")
+            self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
             c.add_user(uid="testuser1", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
             self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
@@ -178,6 +181,7 @@ class UserAPITest(unittest.TestCase):
         # test delate and add same user
         with transaction.commit_on_success():
             c.delete_user("uid=tux")
+            self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
         self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
 
