@@ -31,6 +31,8 @@ from placard.tldap import transaction, connection
 from placard import exceptions
 import ldap
 
+from placard.tldap import exceptions as tldapexceptions
+
 server = None
 
 class UserAPITest(unittest.TestCase):
@@ -166,9 +168,9 @@ class UserAPITest(unittest.TestCase):
             self.assertEqual(c.get_user("uid=tux").sn, "Milkshakes")
             c.update_user("uid=tux", sn="Bannas")
             self.assertEqual(c.get_user("uid=tux").sn, "Bannas")
-            # next statement will fail when executed because tux already exists
-            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
+            self.assertRaises(ldap.ALREADY_EXISTS, c.add_user, uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
         self.assertEqual(c.get_user("uid=tux").sn, "Gates")
 
         # test roll back on error of delete and add of same user
@@ -176,8 +178,9 @@ class UserAPITest(unittest.TestCase):
             c.delete_user("uid=tux")
             self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            c.add_user(uid="testuser1", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            self.assertRaises(ldap.ALREADY_EXISTS, c.commit)
+            self.assertRaises(ldap.ALREADY_EXISTS, c.add_user, uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
         self.assertEqual(c.get_user("uid=tux").sn, "Gates")
 
         # test delate and add same user
