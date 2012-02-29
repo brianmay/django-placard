@@ -27,7 +27,7 @@ import unittest
 from placard.server import slapd
 from placard.client import LDAPClient
 from placard.misc.test_data import test_ldif
-from placard.tldap import transaction
+from placard.tldap import transaction, connection
 from placard import exceptions
 import ldap
 
@@ -45,9 +45,11 @@ class UserAPITest(unittest.TestCase):
 
         self.client = Client()
         self.server = server
+        connection.reset()
             
     def tearDown(self):
         self.server.stop()
+        connection.reset()
 
 
     @transaction.commit_on_success()

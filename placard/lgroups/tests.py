@@ -25,6 +25,7 @@ import unittest
 from placard.server import slapd
 from placard.client import LDAPClient
 from placard.misc.test_data import test_ldif
+from placard.tldap import connection
 from placard import exceptions
 
 server = None
@@ -42,10 +43,12 @@ class LDAPGroupTest(unittest.TestCase):
 
         self.client = Client()
         self.server = server
+        connection.reset()
 
             
     def tearDown(self):
         self.server.stop()
+        connection.reset()
 
 
     def test_get_groups(self):
