@@ -135,6 +135,7 @@ class UserAPITest(unittest.TestCase):
 
     def test_transactions(self):
         c = LDAPClient()
+        c.conn.autoflushcache = False
         rdn = getattr(settings, 'LDAP_USER_RDN', 'uid')
 
         # test explicit roll back
@@ -159,8 +160,53 @@ class UserAPITest(unittest.TestCase):
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
 #            c.update_user("uid=tux", sn="Gates")
         self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "000")
 
+        # test deleting attribute *of new object* with rollback
+        with transaction.commit_on_success():
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", None) ])
+            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "000")
+
+        # test deleting attribute *of new object* with success
+        with transaction.commit_on_success():
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", None) ])
+            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+
+        # test adding attribute with rollback
+        with transaction.commit_on_success():
+            c.update_user("uid=tux", telephoneNumber="111")
+            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+
+        # test adding attribute with success
+        with transaction.commit_on_success():
+            c.update_user("uid=tux", telephoneNumber="111")
+            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
+
+        # test replacing attribute with rollback
+        with transaction.commit_on_success():
+            c.update_user("uid=tux", telephoneNumber="222")
+            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
+
+        # test replacing attribute with success
+        with transaction.commit_on_success():
+            c.update_user("uid=tux", telephoneNumber="222")
+            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
+
+        # modify attribute
         c.update_user("uid=tux", sn="Gates")
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
 
         # test success when 3rd statement fails; need to roll back 2nd and 1st statements
         with transaction.commit_on_success():
@@ -194,6 +240,8 @@ class UserAPITest(unittest.TestCase):
         with transaction.commit_on_success():
             c.delete_user("uid=tux")
         self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
+
+        c.conn.autoflushcache = True
         
         
 class UserViewsTests(TestCase):
