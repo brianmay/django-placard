@@ -43,12 +43,12 @@ class LDAPGroupTest(unittest.TestCase):
 
         self.client = Client()
         self.server = server
-        connection.reset()
+        connection.reset(forceflushcache=True)
 
             
     def tearDown(self):
         self.server.stop()
-        connection.reset()
+        connection.reset(forceflushcache=True)
 
 
     def test_get_groups(self):

@@ -47,11 +47,11 @@ class UserAPITest(unittest.TestCase):
 
         self.client = Client()
         self.server = server
-        connection.reset()
+        connection.reset(forceflushcache=True)
             
     def tearDown(self):
         self.server.stop()
-        connection.reset()
+        connection.reset(forceflushcache=True)
 
 
     @transaction.commit_on_success()
