@@ -204,6 +204,20 @@ class UserAPITest(unittest.TestCase):
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
 
+        # test deleting attribute value with rollback
+        with transaction.commit_on_success():
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
+            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
+        
+        # test deleting attribute value with success
+        with transaction.commit_on_success():
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])    
+            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
+
         # modify attribute
         c.update_user("uid=tux", sn="Gates")
         self.assertEqual(c.get_user("uid=tux").sn, "Gates")
@@ -217,6 +231,26 @@ class UserAPITest(unittest.TestCase):
             self.assertRaises(ldap.ALREADY_EXISTS, c.add_user, uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
             c.conn.fail() # raises TestFailure during commit causing rollback
             self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
+
+        # test rename with rollback
+        with transaction.commit_on_success():
+            c.change_uid("uid=tux","tuz")
+            c.conn.fail() # raises TestFailure during commit causing rollback
+            self.assertRaises(tldapexceptions.TestFailure, c.commit)
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tuz")
+
+        # test rename with success
+        with transaction.commit_on_success():
+            c.change_uid("uid=tux","tuz")
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
+        self.assertEqual(c.get_user("uid=tuz").sn, "Gates")
+
+        # test rename back with success
+        with transaction.commit_on_success():
+            c.change_uid("uid=tuz","tux")
+        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tuz")
         self.assertEqual(c.get_user("uid=tux").sn, "Gates")
 
         # test roll back on error of delete and add of same user
