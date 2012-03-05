@@ -20,7 +20,7 @@ from django.conf import settings
 from django.template.defaultfilters import dictsort
 
 import os
-import placard.tldap as ldap
+import placard.tldap as tldap
 import ldap.modlist as modlist
 try:
     import smbpasswd
@@ -38,9 +38,9 @@ ldap_attrs = __import__(settings.LDAP_ATTRS, {}, {}, [''])
 class LDAPClient(object):
 
     def __init__(self):
-        self.conn = ldap.connection
+        self.conn = tldap.connection
 
-        s = ldap.connection.settings_dict
+        s = self.conn.settings_dict
         try:
             # try using new config
             self.base = s['BASE']
@@ -57,7 +57,7 @@ class LDAPClient(object):
         ldif = modlist.addModlist(attrs)
         self.conn.add_s(dn, ldif)
 
-    def ldap_search(self, base_dn, search_filter, retrieve_attributes=['*','+'], search_scope=ldap.SCOPE_SUBTREE):
+    def ldap_search(self, base_dn, search_filter, retrieve_attributes=['*','+'], search_scope=tldap.SCOPE_SUBTREE):
         return self.conn.search_s(base_dn, search_scope, search_filter, retrieve_attributes)
 
     def ldap_modify(self, dn, old, new):
@@ -75,9 +75,9 @@ class LDAPClient(object):
         # Do the actual modification
         try:
             self.conn.modify_s(dn, ldif)
-        except ldap.PROTOCOL_ERROR, excp:
+        except tldap.PROTOCOL_ERROR, excp:
             if not excp[0]['info'] == 'no modifications specified':
-                raise ldap.PROTOCOL_ERROR
+                raise tldap.PROTOCOL_ERROR
         
     def ldap_delete(self, dn):
         self.conn.delete_s(dn)
@@ -346,7 +346,7 @@ class LDAPClient(object):
             self.update_user(search_string, sambaLMPassword=smbpasswd.lmhash(raw_password), sambaPwdMustChange='')
         if 'unicodePwd' in password_attrs:
             unicode_password = unicode("\"" + str(raw_password) + "\"", "iso-8859-1").encode("utf-16-le")
-            mod_attrs = [( ldap.MOD_REPLACE, 'unicodePwd', unicode_password),( ldap.MOD_REPLACE, 'unicodePwd', unicode_password)]
+            mod_attrs = [( tldap.MOD_REPLACE, 'unicodePwd', unicode_password),( tldap.MOD_REPLACE, 'unicodePwd', unicode_password)]
             self.conn.modify_s(dn, mod_attrs)
 
     def check_password(self, search_string, raw_password):
