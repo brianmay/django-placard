@@ -141,7 +141,7 @@ class UserAPITest(unittest.TestCase):
         # test explicit roll back
         with transaction.commit_on_success():
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-#            c.update_user("uid=tux", sn="Gates")
+            c.update_user("uid=tux", sn="Gates")
             c.rollback()
         self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
 
@@ -149,7 +149,7 @@ class UserAPITest(unittest.TestCase):
         try:
             with transaction.commit_on_success():
                 c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-#                c.update_user("uid=tux", sn="Gates")
+                c.update_user("uid=tux", sn="Gates")
                 raise RuntimeError("testing failure")
         except RuntimeError:
             pass
@@ -158,8 +158,8 @@ class UserAPITest(unittest.TestCase):
         # test success commits
         with transaction.commit_on_success():
             c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-#            c.update_user("uid=tux", sn="Gates")
-        self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
+            c.update_user("uid=tux", sn="Gates")
+        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "000")
 
         # test deleting attribute *of new object* with rollback
@@ -217,10 +217,6 @@ class UserAPITest(unittest.TestCase):
             c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])    
             self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
         self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-
-        # modify attribute
-        c.update_user("uid=tux", sn="Gates")
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
 
         # test success when 3rd statement fails; need to roll back 2nd and 1st statements
         with transaction.commit_on_success():
