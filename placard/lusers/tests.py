@@ -190,6 +190,38 @@ class UserAPITest(unittest.TestCase):
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
 
+        # test search scopes
+        c.conn.add("ou=Groups, dc=python-ldap,dc=org", [ ("objectClass", ["top","organizationalunit"]) ])
+        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
+        self.assertEqual(len(r), 0)
+        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
+        self.assertEqual(len(r), 0)
+        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
+        self.assertEqual(len(r), 0)
+        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
+
+        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
+        self.assertEqual(len(r), 0)
+        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
+        self.assertEqual(len(r), 0)
+        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
+
+        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
+        self.assertEqual(len(r), 1)
+        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
+        self.assertEqual(len(r), 0)
+        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
+
         # test replacing attribute with rollback
         with transaction.commit_on_success():
             c.update_user("uid=tux", telephoneNumber="222")
