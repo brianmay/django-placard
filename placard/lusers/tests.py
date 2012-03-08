@@ -178,7 +178,7 @@ class UserAPITest(unittest.TestCase):
 
         # test adding attribute with rollback
         with transaction.commit_on_success():
-            c.update_user("uid=tux", telephoneNumber="111")
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
             c.conn.fail() # raises TestFailure during commit causing rollback
             self.assertRaises(tldapexceptions.TestFailure, c.commit)
@@ -186,7 +186,8 @@ class UserAPITest(unittest.TestCase):
 
         # test adding attribute with success
         with transaction.commit_on_success():
-            c.update_user("uid=tux", telephoneNumber="111")
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
+            self.assertRaises(ldap.TYPE_OR_VALUE_EXISTS, c.conn.modify, "uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
 
@@ -224,7 +225,7 @@ class UserAPITest(unittest.TestCase):
 
         # test replacing attribute with rollback
         with transaction.commit_on_success():
-            c.update_user("uid=tux", telephoneNumber="222")
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_REPLACE, "telephoneNumber", "222") ])
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
             c.conn.fail() # raises TestFailure during commit causing rollback
             self.assertRaises(tldapexceptions.TestFailure, c.commit)
@@ -232,7 +233,7 @@ class UserAPITest(unittest.TestCase):
 
         # test replacing attribute with success
         with transaction.commit_on_success():
-            c.update_user("uid=tux", telephoneNumber="222")
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_REPLACE, "telephoneNumber", "222") ])
             self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
 
@@ -243,10 +244,11 @@ class UserAPITest(unittest.TestCase):
             c.conn.fail() # raises TestFailure during commit causing rollback
             self.assertRaises(tldapexceptions.TestFailure, c.commit)
         self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
-        
+
         # test deleting attribute value with success
         with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])    
+            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
+            self.assertRaises(ldap.NO_SUCH_ATTRIBUTE, c.conn.modify, "uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
             self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
         self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
 
