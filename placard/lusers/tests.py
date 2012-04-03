@@ -27,11 +27,9 @@ import unittest
 from placard.server import slapd
 from placard.client import LDAPClient
 from placard.misc.test_data import test_ldif
-from placard.tldap import transaction, connection
 from placard import exceptions
-import ldap
-
-from placard.tldap import exceptions as tldapexceptions
+import tldap
+import tldap.transaction
 
 server = None
 
@@ -47,25 +45,25 @@ class UserAPITest(unittest.TestCase):
 
         self.client = Client()
         self.server = server
-        connection.reset(forceflushcache=True)
+        tldap.connection.reset(forceflushcache=True)
             
     def tearDown(self):
         self.server.stop()
-        connection.reset(forceflushcache=True)
+        tldap.connection.reset(forceflushcache=True)
 
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_get_users(self):
         c = LDAPClient()
         self.failUnlessEqual(len(c.get_users()), 3)
         
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_get_user(self):
         c = LDAPClient()      
         u = c.get_user('uid=testuser3')
         self.failUnlessEqual(u.mail, 't.user3@example.com')
                              
-    @transaction.commit_manually()
+    @tldap.transaction.commit_manually()
     def test_delete_user(self):
         c = LDAPClient()
         self.failUnlessEqual(len(c.get_users()), 3)
@@ -73,13 +71,13 @@ class UserAPITest(unittest.TestCase):
         c.commit()
         self.failUnlessEqual(len(c.get_users()), 2)
                 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_in_ldap(self):
         c = LDAPClient()
         self.assertTrue(c.in_ldap('uid=testuser1'))
         self.assertFalse(c.in_ldap('uid=testuser4'))
         
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_update_user(self):
         c = LDAPClient()
         u = c.get_user('uid=testuser1')
@@ -89,7 +87,7 @@ class UserAPITest(unittest.TestCase):
         u = c.get_user('uid=testuser1')
         self.failUnlessEqual(u.sn, 'Bloggs')
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_update_user_no_modifications(self):
         c = LDAPClient()
         u = c.get_user('uid=testuser1')
@@ -98,7 +96,7 @@ class UserAPITest(unittest.TestCase):
         u = c.get_user('uid=testuser1')
         self.failUnlessEqual(u.sn, 'User')
 
-    @transaction.commit_manually()
+    @tldap.transaction.commit_manually()
     def test_lock_unlock(self):
         c = LDAPClient()
         self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
@@ -109,203 +107,29 @@ class UserAPITest(unittest.TestCase):
         c.commit()
         self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_user_search(self):
         c = LDAPClient()
         users = c.search_users(['User',])
         self.failUnlessEqual(len(users), 3)
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_user_search_one(self):
         c = LDAPClient()
         users = c.search_users(['testuser1',])
         self.failUnlessEqual(len(users), 1)
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_user_search_empty(self):
         c = LDAPClient()
         users = c.search_users(['nothing',])
         self.failUnlessEqual(len(users), 0)
 
-    @transaction.commit_on_success()
+    @tldap.transaction.commit_on_success()
     def test_user_search_multi(self):
         c = LDAPClient()
         users = c.search_users(['test', 'user'])
         self.failUnlessEqual(len(users), 3)
-
-    def test_transactions(self):
-        c = LDAPClient()
-        c.conn.autoflushcache = False
-        rdn = getattr(settings, 'LDAP_USER_RDN', 'uid')
-
-        # test explicit roll back
-        with transaction.commit_on_success():
-            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            c.update_user("uid=tux", sn="Gates")
-            c.rollback()
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-
-        # test roll back on exception
-        try:
-            with transaction.commit_on_success():
-                c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-                c.update_user("uid=tux", sn="Gates")
-                raise RuntimeError("testing failure")
-        except RuntimeError:
-            pass
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-
-        # test success commits
-        with transaction.commit_on_success():
-            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            c.update_user("uid=tux", sn="Gates")
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "000")
-
-        # test deleting attribute *of new object* with rollback
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", None) ])
-            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "000")
-
-        # test deleting attribute *of new object* with success
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", None) ])
-            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-
-        # test adding attribute with rollback
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
-            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-
-        # test adding attribute with success
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
-            self.assertRaises(ldap.TYPE_OR_VALUE_EXISTS, c.conn.modify, "uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_ADD, "telephoneNumber", "111") ])
-            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
-
-        # test search scopes
-        c.conn.add("ou=Groups, dc=python-ldap,dc=org", [ ("objectClass", ["top","organizationalunit"]) ])
-        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
-        self.assertEqual(len(r), 0)
-        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
-        self.assertEqual(len(r), 0)
-        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_BASE, "uid=tux")
-        self.assertEqual(len(r), 0)
-        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
-
-        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
-        self.assertEqual(len(r), 0)
-        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_ONELEVEL, "uid=tux")
-        self.assertEqual(len(r), 0)
-        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
-
-        r = c.conn.search("uid=tux, ou=People, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("ou=People, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
-        self.assertEqual(len(r), 1)
-        r = c.conn.search("ou=Groups, dc=python-ldap,dc=org", ldap.SCOPE_SUBTREE, "uid=tux")
-        self.assertEqual(len(r), 0)
-        self.assertRaises(ldap.NO_SUCH_OBJECT, c.conn.search, "dc=python,dc=org", ldap.SCOPE_BASE, "uid=tux")
-
-        # test replacing attribute with rollback
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_REPLACE, "telephoneNumber", "222") ])
-            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "111")
-
-        # test replacing attribute with success
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_REPLACE, "telephoneNumber", "222") ])
-            self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
-
-        # test deleting attribute value with rollback
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
-            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").telephoneNumber, "222")
-
-        # test deleting attribute value with success
-        with transaction.commit_on_success():
-            c.conn.modify("uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
-            self.assertRaises(ldap.NO_SUCH_ATTRIBUTE, c.conn.modify, "uid=tux, ou=People, dc=python-ldap,dc=org", [ (ldap.MOD_DELETE, "telephoneNumber", "222") ])
-            self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-        self.assertRaises(AttributeError, lambda: c.get_user("uid=tux").telephoneNumber)
-
-        # test success when 3rd statement fails; need to roll back 2nd and 1st statements
-        with transaction.commit_on_success():
-            c.update_user("uid=tux", sn="Milkshakes")
-            self.assertEqual(c.get_user("uid=tux").sn, "Milkshakes")
-            c.update_user("uid=tux", sn="Bannas")
-            self.assertEqual(c.get_user("uid=tux").sn, "Bannas")
-            self.assertRaises(ldap.ALREADY_EXISTS, c.add_user, uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
-
-        # test rename with rollback
-        with transaction.commit_on_success():
-            c.change_uid("uid=tux","tuz")
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tuz")
-
-        # test rename with success
-        with transaction.commit_on_success():
-            c.change_uid("uid=tux","tuz")
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-        self.assertEqual(c.get_user("uid=tuz").sn, "Gates")
-
-        # test rename back with success
-        with transaction.commit_on_success():
-            c.change_uid("uid=tuz","tux")
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tuz")
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
-
-        # test roll back on error of delete and add of same user
-        with transaction.commit_on_success():
-            c.delete_user("uid=tux")
-            self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            self.assertRaises(ldap.ALREADY_EXISTS, c.add_user, uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-            c.conn.fail() # raises TestFailure during commit causing rollback
-            self.assertRaises(tldapexceptions.TestFailure, c.commit)
-        self.assertEqual(c.get_user("uid=tux").sn, "Gates")
-
-        # test delate and add same user
-        with transaction.commit_on_success():
-            c.delete_user("uid=tux")
-            self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-            c.add_user(uid="tux", givenName="Tux",sn="Torvalds",telephoneNumber="000",mail="tuz@example.org",o="Linux Rules",userPassword="silly", schacCountryOfResidence="AU",auEduPersonSharedToken="shared")
-        self.assertEqual(c.get_user("uid=tux").sn, "Torvalds")
-
-        # test delate
-        with transaction.commit_on_success():
-            c.delete_user("uid=tux")
-        self.assertRaises(exceptions.DoesNotExistException, c.get_user, "uid=tux")
-
-        c.conn.autoflushcache = True
         
         
 class UserViewsTests(TestCase):
