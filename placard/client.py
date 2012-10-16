@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with django-placard  If not, see <http://www.gnu.org/licenses/>.
 
+raise RuntimeError("Obsolete file")
 
 from django.conf import settings
 from django.template.defaultfilters import dictsort
@@ -135,7 +136,7 @@ class LDAPClient(object):
         for k, i in kwargs.items():
             if i == '':
                 continue
-            if k == 'objectClass' or k == 'memberUid':
+            if k == 'objectClass' or k == 'memberUid' or k == 'member':
                 new[k] = i
             else:
                 new[k] = str(i)

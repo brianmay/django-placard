@@ -23,9 +23,9 @@ from andsome.middleware.threadlocals import get_current_user
 
 import datetime, time
 
-from placard.client import LDAPClient
 from andsome.util import is_password_strong
 
+import placard.models
 
 class BasicLDAPUserForm(forms.Form):
     """ Basic form used for sub classing """
@@ -52,14 +52,6 @@ class LDAPAdminPasswordForm(forms.Form):
             
             return data
 
-    def save(self, username):        
-        data = self.cleaned_data
-        conn = LDAPClient()
-        conn.change_password('uid=%s' % username, data['new1'])
-        ldap_user = conn.get_user('uid=%s' % username)
-        if hasattr(ldap_user, 'sambaPwdLastSet'):
-            conn.update_user('uid=%s' % username, sambaPwdLastSet=str(int(time.mktime(datetime.datetime.now().timetuple()))))
-
         
 class LDAPPasswordForm(LDAPAdminPasswordForm):
     """ Password change form for user. Muse specify old password. """
@@ -67,17 +59,12 @@ class LDAPPasswordForm(LDAPAdminPasswordForm):
 
     def clean_old(self):
         user = get_current_user()
-        conn = LDAPClient()
-        if not conn.check_password('uid=%s' % user.username, self.cleaned_data['old']):
+        luser = placard.models.account.objects.get(uid=user.username)
+        if not luser.check_password(self.cleaned_data['old']):
             raise forms.ValidationError(u'Your old password was incorrect')
         return self.cleaned_data['old']
 
 
 class AddMemberForm(forms.Form):
     """ Add a user to a group form """
-    add_user = forms.ChoiceField(choices=[('','-------------')]+[(x.uid, x.cn) for x in LDAPClient().get_users()])
-
-    def save(self, gidNumber):
-        conn = LDAPClient()
-        conn.add_group_member('gidNumber=%s' % gidNumber, self.cleaned_data['add_user'])
-
+    add_user = forms.ChoiceField(choices=[('','-------------')]+[(x.uid, x.cn) for x in placard.models.account.objects.all()])

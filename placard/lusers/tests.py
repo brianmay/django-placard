@@ -24,115 +24,33 @@ from django.test import TestCase
 
 import unittest
 
-from placard.server import slapd
-from placard.client import LDAPClient
-from placard.misc.test_data import test_ldif
+from tldap.test import slapd
+from tldap.test.data import test_ldif
 
-server = None
+import placard.models
 
-class UserAPITest(unittest.TestCase):
-    def setUp(self):
-        global server
-        server = slapd.Slapd()
-        server.set_port(38911)
-        server.start()
-        base = server.get_dn_suffix()
-        
-        server.ldapadd("\n".join(test_ldif)+"\n")
+import ldap
 
-        self.client = Client()
-        self.server = server
-            
-    def tearDown(self):
-        self.server.stop()
-
-
-    def test_get_users(self):
-        c = LDAPClient()
-        self.failUnlessEqual(len(c.get_users()), 3)
-        
-    def test_get_user(self):
-        c = LDAPClient()      
-        u = c.get_user('uid=testuser3')
-        self.failUnlessEqual(u.mail, 't.user3@example.com')
-                             
-    def test_delete_user(self):
-        c = LDAPClient()
-        self.failUnlessEqual(len(c.get_users()), 3)
-        c.delete_user('uid=testuser2')
-        self.failUnlessEqual(len(c.get_users()), 2)
-                
-    def test_in_ldap(self):
-        c = LDAPClient()
-        self.assertTrue(c.in_ldap('uid=testuser1'))
-        self.assertFalse(c.in_ldap('uid=testuser4'))
-        
-    def test_update_user(self):
-        c = LDAPClient()
-        u = c.get_user('uid=testuser1')
-        self.failUnlessEqual(u.sn, 'User')  
-        c.update_user('uid=%s' % u.uid, sn='Bloggs')
-        u = c.get_user('uid=testuser1')
-        self.failUnlessEqual(u.sn, 'Bloggs')
-
-    def test_update_user_no_modifications(self):
-        c = LDAPClient()
-        u = c.get_user('uid=testuser1')
-        self.failUnlessEqual(u.sn, 'User')  
-        c.update_user('uid=%s' % u.uid, sn='User')
-        u = c.get_user('uid=testuser1')
-        self.failUnlessEqual(u.sn, 'User')
-
-    def test_lock_unlock(self):
-        c = LDAPClient()
-        self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
-        c.lock_user('uid=testuser1')
-        self.failUnlessEqual(c.is_locked('uid=testuser1'), True)
-        c.unlock_user('uid=testuser1')
-        self.failUnlessEqual(c.is_locked('uid=testuser1'), False)
-
-    def test_user_search(self):
-        c = LDAPClient()
-        users = c.search_users(['User',])
-        self.failUnlessEqual(len(users), 3)
-
-    def test_user_search_one(self):
-        c = LDAPClient()
-        users = c.search_users(['testuser1',])
-        self.failUnlessEqual(len(users), 1)
-
-    def test_user_search_empty(self):
-        c = LDAPClient()
-        users = c.search_users(['nothing',])
-        self.failUnlessEqual(len(users), 0)
-
-    def test_user_search_multi(self):
-        c = LDAPClient()
-        users = c.search_users(['test', 'user'])
-        self.failUnlessEqual(len(users), 3)
-        
-        
 class UserViewsTests(TestCase):
 
     def setUp(self):
-        global server
         server = slapd.Slapd()
         server.set_port(38911)
         server.start()
         base = server.get_dn_suffix()
-        
+
         server.ldapadd("\n".join(test_ldif)+"\n")
 
         self.server = server
 
-        try:
-            super_user = User.objects.create_user('super', 'sam@vpac.org', 'aq12ws')
-            super_user.is_superuser = True
-            super_user.save()
-        except:
-            pass
+        self.group = placard.models.group
+        self.person = placard.models.person
+        self.account = placard.models.account
 
-            
+        super_user = User.objects.create_user('super', 'sam@vpac.org', 'aq12ws')
+        super_user.is_superuser = True
+        super_user.save()
+
     def tearDown(self):
         self.server.stop()
 
@@ -162,17 +80,18 @@ class UserViewsTests(TestCase):
 
     def test_lock_user_view(self):
         response = self.client.get(reverse('plac_user_detail_verbose', args=['testuser2']))
-        
-    def test_lock_unlock_user_view(self):
-        c = LDAPClient()
-        self.failUnlessEqual(c.is_locked('uid=testuser2'), False)
 
-        self.client.login(username='super', password='aq12ws')        
+    def test_lock_unlock_user_view(self):
+        self.failUnlessEqual(self.account.objects.get(uid='testuser2').is_locked(), False)
+
+        self.client.login(username='super', password='aq12ws')
         response = self.client.get(reverse('plac_lock_user', args=['testuser2']))
-        self.failUnlessEqual(c.is_locked('uid=testuser2'), True)
+
+        self.failUnlessEqual(self.account.objects.get(uid='testuser2').is_locked(), True)
 
         response = self.client.get(reverse('plac_unlock_user', args=['testuser2']))
-        self.failUnlessEqual(c.is_locked('uid=testuser2'), False)
+
+        self.failUnlessEqual(self.account.objects.get(uid='testuser2').is_locked(), False)
 
 
 class PasswordTests(TestCase):
@@ -183,46 +102,54 @@ class PasswordTests(TestCase):
         server.set_port(38911)
         server.start()
         base = server.get_dn_suffix()
-        
+
         server.ldapadd("\n".join(test_ldif)+"\n")
 
         self.server = server
 
-        try:
-            super_user = User.objects.create_user('super', 'sam@vpac.org', 'aq12ws')
-            super_user.is_superuser = True
-            super_user.save()
-        except:
-            pass
+        self.group = placard.models.group
+        self.person = placard.models.person
+        self.account = placard.models.account
 
-            
+        super_user = User.objects.create_user('super', 'sam@vpac.org', 'aq12ws')
+        super_user.is_superuser = True
+        super_user.save()
+
     def tearDown(self):
         self.server.stop()
 
-
     def test_api(self):
-        c = LDAPClient()      
-        c.change_password('uid=testuser3', raw_password='aq12ws')
-        self.assertTrue(c.check_password('uid=testuser3', 'aq12ws'), True)
-        c.change_password('uid=testuser3', raw_password='qwerty')
-        self.assertTrue(c.check_password('uid=testuser3', 'qwerty'), True)
+        u = self.account.objects.get(uid='testuser2')
+        u.change_password('aq12ws', settings.LDAP_PASSWD_SCHEME)
+        u.save()
+
+        self.failUnlessEqual(u.check_password('aq12ws'), True)
+
+        u = self.account.objects.get(uid='testuser3')
+        u.change_password('qwerty', settings.LDAP_PASSWD_SCHEME)
+        u.save()
+
+        self.failUnlessEqual(u.check_password('qwerty'), True)
 
     def test_admin_view(self):
-        c = LDAPClient()      
         response = self.client.get(reverse('plac_change_password', args=['testuser1']))
         self.failUnlessEqual(response.status_code, 302)
         self.client.login(username='super', password='aq12ws')
         response = self.client.get(reverse('plac_change_password', args=['testuser1']))
         self.failUnlessEqual(response.status_code, 200)
-        
+
         response = self.client.post(reverse('plac_change_password', args=['testuser1']), {'new1': 'aq12ws222', 'new2': 'aq12ws222'})
         self.failUnlessEqual(response.status_code, 302)
-        self.assertTrue(c.check_password('uid=testuser1', 'aq12ws222'), True)
+
+        u = self.account.objects.get(uid='testuser1')
+        self.failUnlessEqual(u.check_password('aq12ws222'), True)
 
     def test_user_view(self):
-        c = LDAPClient()
-        c.change_password('uid=testuser2', raw_password='aq12ws')
-        luser = c.get_user('uid=testuser2')
+        u = self.account.objects.get(uid='testuser2')
+        u.change_password('aq12ws', settings.LDAP_PASSWD_SCHEME)
+        u.save()
+
+        luser = self.account.objects.get(uid='testuser2')
         user = User.objects.create_user(luser.uid, luser.mail, 'aq12ws')
 
         response = self.client.get(reverse('plac_user_password'))
@@ -238,6 +165,8 @@ class PasswordTests(TestCase):
 
         response = self.client.post(reverse('plac_user_password'), {'old': 'aq12ws', 'new1': 'aq12ws222', 'new2': 'aq12ws222'})
         self.failUnlessEqual(response.status_code, 302)
-        self.assertTrue(c.check_password('uid=testuser2', 'aq12ws222'), True)
 
-        
+        self.failUnlessEqual(u.check_password('aq12ws222'), True)
+
+if __name__ == '__main__':
+    unittest.main()

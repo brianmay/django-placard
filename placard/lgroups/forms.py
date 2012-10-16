@@ -15,30 +15,23 @@
 # You should have received a copy of the GNU General Public License
 # along with django-placard  If not, see <http://www.gnu.org/licenses/>.
 
-
 from django import forms
 
-from placard.client import LDAPClient
+import placard.models
 
 class BasicLDAPGroupForm(forms.Form):
     cn = forms.CharField(label='CN')
 
     def clean_cn(self):
         cn = self.cleaned_data['cn']
-        conn = LDAPClient()
-        groups = conn.get_groups("cn=%s" % cn)
+        groups = placard.models.group.filter(cn=cn)
         if len(groups) > 0:
             raise forms.ValidationError("This group already exists!")
         return cn
 
-    def save(self):
-        data = self.cleaned_data
-        conn = LDAPClient()
-        conn.add_group(**data)
-
 
 class AddGroupForm(forms.Form):
-    add_group = forms.ChoiceField(choices=[('','--------------------')]+[(x.gidNumber, x.cn) for x in LDAPClient().get_groups()])
+    add_group = forms.ChoiceField(choices=[('','--------------------')]+[(x.gidNumber, x.cn) for x in placard.models.group.objects.all()])
 
     def save(self, uid):
         conn = LDAPClient()

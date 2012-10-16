@@ -1,4 +1,4 @@
-# Copyright 2010 VPAC
+# Copyright 2012 VPAC
 #
 # This file is part of django-placard.
 #
@@ -15,21 +15,3 @@
 # You should have received a copy of the GNU General Public License
 # along with django-placard  If not, see <http://www.gnu.org/licenses/>.
 
-
-"Placard exceptions"
-
-class PlacardException(Exception):
-    "Base Class"
-    pass
-
-class DoesNotExistException(PlacardException):
-    "LDAP object does not exist"
-    pass
-
-class MultipleResultsException(PlacardException):
-    "Returned multiple results when expecting one"
-    pass
-
-class RequiredAttributeNotGiven(PlacardException):
-    "Required attribute not given when adding object"
-    pass

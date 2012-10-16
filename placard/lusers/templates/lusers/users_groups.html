@@ -1,4 +1,6 @@
 {% extends "main.html" %}
+{% load lusers %}
+{% load lgroups %}
 
 {% block title %}Users{% endblock %}
 
@@ -15,11 +17,11 @@
     <h2>Groups</h2>
     <table>
       <tr>
-	<td>Primary Group:</td><td><a href="{{ luser.primary_group.get_absolute_url }}">{{ luser.primary_group }}</a></td>
+	<td>Primary Group:</td><td><a href="{% get_group_url luser.primary_group %}">{{ luser.primary_group }}</a></td>
       </tr>
-      {% for g in luser.secondary_groups %}
+      {% for g in luser.secondary_groups.all %}
       <tr>
-	<td>&nbsp;</td><td><a href="{{ g.get_absolute_url }}">{{ g }}</a></td>
+	<td>Secondary Groups:</td><td><a href="{% get_group_url g %}">{{ g }}</a></td>
 	{% if perms.auth.change_user %}
 	<td><a href="{% url plac_grp_rm_member g.gidNumber,luser.uid %}" class="deletelink">remove</a></td>		
 	{% endif %}

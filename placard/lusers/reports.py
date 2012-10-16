@@ -25,13 +25,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.pagesizes import A4, portrait
 from reportlab.lib import colors
 
-from placard.client import LDAPClient
+import placard.models
 
 PAGE_WIDTH = portrait(A4)[0]    
 
 def user_list_pdf(request):
-    conn = LDAPClient()
-    user_list = conn.get_users()
+    user_list = placard.models.person.objects.all()
     today = datetime.date.today()
     response = HttpResponse(mimetype='application/pdf')
     

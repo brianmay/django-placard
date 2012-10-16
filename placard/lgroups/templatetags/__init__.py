@@ -1,4 +1,4 @@
-# Copyright 2010 VPAC
+# Copyright 2012 VPAC
 #
 # This file is part of django-placard.
 #
@@ -14,5 +14,4 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with django-placard  If not, see <http://www.gnu.org/licenses/>.
-
 

@@ -21,14 +21,12 @@ from django.contrib.auth.forms import PasswordResetForm as BasePasswordResetForm
 from django.contrib.auth.forms import SetPasswordForm as BaseSetPasswordForm
 from django.contrib.auth.models import User
 
-from placard.client import LDAPClient
 from andsome.util import is_password_strong
 
+import placard.models
 
 def sync_users():
-    conn = LDAPClient()
-
-    for luser in conn.get_users():
+    for luser in placard.models.account.objects.all():
         try:
             user = User.objects.get(username__exact=luser.uid)
         except User.DoesNotExist:
@@ -42,33 +40,24 @@ def sync_users():
 
 
 class PasswordResetForm(BasePasswordResetForm):
-    
+
     def clean_email(self):
         """
         Validates that a user exists with the given e-mail address.
         """
         sync_users()
-        conn = LDAPClient()
-        email = self.cleaned_data["email"]
-        luser_list = conn.get_users('mail=%s' % email)
+        luser_list = placard.models.account.objects.filter(mail=email):
         self.users_cache = User.objects.filter(username__in=[x.uid for x in luser_list])
         if len(self.users_cache) == 0:
             raise forms.ValidationError("That e-mail address doesn't have an associated user account. Are you sure you've registered?")
 
 
-
 class SetPasswordForm(BaseSetPasswordForm):
-    
+
     def clean_new_password1(self):
         password1 = self.cleaned_data.get('new_password1')
 
         if not is_password_strong(password1):
             raise forms.ValidationError(u'Your password was found to be insecure, a good password has a combination of letters (upercase, lowercase), numbers and is at least 8 characters long.')
-                        
+
         return password1
-
-
-    def save(self, commit=True):
-        conn = LDAPClient()
-        conn.change_password("uid=%s" % self.user.username, self.cleaned_data['new_password1'])
-        return self.user

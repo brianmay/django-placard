@@ -1,4 +1,4 @@
-# Copyright 2010 VPAC
+# Copyright 2012 VPAC
 #
 # This file is part of django-placard.
 #
@@ -15,22 +15,14 @@
 # You should have received a copy of the GNU General Public License
 # along with django-placard  If not, see <http://www.gnu.org/licenses/>.
 
-from django.core.management.base import BaseCommand
+import django.template
+from django.core.urlresolvers import reverse as _reverse
 
 import placard.models
 
-class Command(BaseCommand):
-    help = "Generates a shadow file from all LDAP users"
-    
-    def handle(self, **options):        
-        verbose = int(options.get('verbosity'))
-        
-        user_list = placard.models.account.objects.all()
-        for u in user_list:
-            if hasattr(u, 'userPassword'):
-                p = u.userPassword
-                try:
-                    password = p[p.index('}')+1:]
-                except:
-                    password = p
-                print '%s:%s' % (u.uid, password)
+register = django.template.Library()
+
+@register.simple_tag
+def get_user_url(instance):
+    assert isinstance(instance, placard.models.account)
+    return _reverse("plac_user_detail",kwargs={'username': instance.uid})

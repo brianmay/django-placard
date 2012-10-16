@@ -1,4 +1,5 @@
 {% extends "main.html" %}
+{% load lgroups %}
 
 {% block title %}LDAP Groups{% endblock %}
 
@@ -29,7 +30,7 @@
       <tbody>
    	{% for g in group_list|dictsort:"cn" %}
 	<tr class="{% cycle row1,row2  as rowcolours %}">
-	  <td><a href="{{ g.get_absolute_url }}">{{ g.gidNumber }}</a></td>
+	  <td><a href="{% get_group_url g %}">{{ g.gidNumber }}</a></td>
 	  <td>{{ g }}</td>
 	</tr>
 	{% endfor %}

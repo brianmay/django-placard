@@ -26,28 +26,30 @@ from django.contrib import messages
 
 from andsome.util.filterspecs import Filter, FilterBar
 
-from placard.client import LDAPClient
-from placard import exceptions
 from placard.lgroups.forms import AddGroupForm
 from placard.lusers.forms import BasicLDAPUserForm, LDAPAdminPasswordForm, LDAPPasswordForm
 
-def user_list(request, default_filter=None):
-    conn = LDAPClient()
+import tldap
+import placard.models
+
+def user_list(request):
     if request.REQUEST.has_key('group'):
-        user_list = conn.get_group_members("gidNumber=%s" % request.GET['group'])
+        try:
+            group = placard.models.group.objects.get(gidNumber=request.GET['group'])
+        except placard.models.group.DoesNotExist:
+            return HttpResponseNotFound()
+        user_list = group.secondary_accounts.all()
     else:
-        if default_filter:
-            user_list = conn.get_users(default_filter)
-        else:
-            user_list = conn.get_users()
+        user_list = placard.models.account.objects.all()
 
     if request.REQUEST.has_key('q'):
         term_list = request.REQUEST['q'].lower().split(' ')
-        user_list = conn.search_users(term_list)
+        for term in term_list:
+            user_list = user_list.filter(tldap.Q(uid__contains=term) | tldap.Q(cn__contains=term))
 
     filter_list = []
     group_list = {}
-    for group in conn.get_groups():
+    for group in placard.models.group.objects.all():
         group_list[group.gidNumber] = group.cn
 
     filter_list.append(Filter(request, 'group', group_list))
@@ -57,19 +59,21 @@ def user_list(request, default_filter=None):
 
 
 def user_detail(request, username):
-    conn = LDAPClient()
     try:
-        luser = conn.get_user("uid=%s" % username)
-    except exceptions.DoesNotExistException:
+        luser = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
         raise Http404
 
     if request.method == 'POST':
         form = AddGroupForm(request.POST)
         if form.is_valid():
-            group_id = form.save(username)
-            group = conn.get_group('gidNumber=%s' % group_id)
-            messages.info(request, 'User %s has been added to group %s.' % (username, group)) 
-            return HttpResponseRedirect(luser.get_absolute_url())
+            try:
+                group = placard.models.group.objects.get(gidNumber=form.cleaned_data['add_group'])
+            except placard.models.group.DoesNotExist:
+                return HttpResponseNotFound()
+            luser.secondary_groups.add(group)
+            messages.info(request, u'User %s has been added to group %s.' % (luser, group)) 
+            return HttpResponseRedirect(reverse("plac_user_detail",kwargs={ 'username': luser.uid }))
     else:
         form = AddGroupForm()
 
@@ -82,20 +86,26 @@ def add_edit_user(request, username=None, form=BasicLDAPUserForm, template_name=
     if (request.user.username != username) and (not request.user.has_perm('auth.add_user')):
         return HttpResponseForbidden()
 
+    if username:
+        try:
+            ldap_user = placard.models.account.objects.get(uid=username)
+        except placard.models.account.DoesNotExist:
+            raise Http404
+    else:
+        ldap_user = placard.models.account()
+
     if request.method == 'POST':
         form = UserForm(request.POST, request.FILES)
         if form.is_valid():
-            if username:
-                ldap_user = form.save(username)
-            else:
-                ldap_user = form.save()
-            return HttpResponseRedirect(ldap_user.get_absolute_url())
+            ldap_user.givenName = form.cleaned_data['givenName']
+            ldap_user.sn = form.cleaned_data['sn']
+            ldap_user.save()
+            return HttpResponseRedirect(reverse("plac_user_detail",kwargs={ 'username': ldap_user.uid }))
     else:
         if username:
             form = UserForm()
-            conn = LDAPClient()
-            ldap_user = conn.get_user("uid=%s" % username)
-            form.initial = ldap_user.__dict__
+            form.initial['givenName'] = ldap_user.givenName
+            form.initial['sn'] = ldap_user.sn
         else:
             form = UserForm()
     
@@ -116,11 +126,19 @@ def change_password(request, username, password_form=LDAPAdminPasswordForm, temp
 
     PasswordForm = password_form
 
+    try:
+        ldap_user = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
+        raise Http404
+
     if request.method == 'POST':
         
         form = PasswordForm(request.POST)
         if form.is_valid():
-            form.save(username)
+            data = form.cleaned_data
+            ldap_user.change_password(data['new1'], settings.LDAP_PASSWD_SCHEME)
+            ldap_user.save()
+
             messages.info(request,'Password changed successfully')
             if redirect_url:
                 return HttpResponseRedirect(redirect_url)
@@ -139,8 +157,11 @@ def user_password_change(request, redirect_url=None):
 def delete_user(request, username):
 
     if request.method == 'POST':
-        conn = LDAPClient()
-        conn.delete_user('uid=%s' % username)
+        try:
+            ldap_user = placard.models.account.objects.get(uid=username)
+        except placard.models.account.DoesNotExist:
+            raise Http404
+        ldap_user.delete()
         return HttpResponseRedirect(reverse('plac_user_list'))
     
     return render_to_response('lusers/user_confirm_delete.html', locals(), context_instance=RequestContext(request))
@@ -148,42 +169,41 @@ def delete_user(request, username):
 
 @permission_required('auth.change_user')
 def lock_user(request, username):
-    conn = LDAPClient()
-    conn.lock_user('uid=%s' % username)
-    messages.info(request, "%s's has been locked" % username)
-    luser = conn.get_user('uid=%s' % username)
+    try:
+        ldap_user = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
+        raise Http404
+
+    ldap_user.lock()
+
     return HttpResponseRedirect(luser.get_absolute_url())
 
 @permission_required('auth.change_user')
 def unlock_user(request, username):
-    conn = LDAPClient()
-    conn.unlock_user('uid=%s' % username)
-    messages.info(request, "%s's has been unlocked" % username)
-    luser = conn.get_user('uid=%s' % username)
+    try:
+        ldap_user = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
+        raise Http404
+
+    ldap_user.unlock()
+
     return HttpResponseRedirect(luser.get_absolute_url())
 
 @permission_required('auth.change_user')
 def user_detail_verbose(request, username):
-    conn = LDAPClient()
     try:
-        luser = conn.ldap_search(settings.LDAP_USER_BASE, 'uid=%s' % username)[0]
-    except:
+        luser = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
         raise Http404
-    dn = luser[0]
-    luser = luser[1]
-    try:
-        del(luser['jpegPhoto'])
-    except:
-        pass
-    luser = luser.items()
+
     return render_to_response('lusers/user_detail_verbose.html', locals(), context_instance=RequestContext(request))
+
 
 @permission_required('auth.change_user')   
 def users_groups(request, username):
-    conn = LDAPClient()
     try:
-        luser = conn.get_user('uid=%s' % username)
-    except:
+        luser = placard.models.account.objects.get(uid=username)
+    except placard.models.account.DoesNotExist:
         raise Http404
 
     return render_to_response('lusers/users_groups.html', {'luser': luser}, context_instance=RequestContext(request))

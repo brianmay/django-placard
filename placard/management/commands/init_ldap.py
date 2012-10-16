@@ -17,38 +17,37 @@
 
 from django.core.management.base import BaseCommand, CommandError
 
+import tldap.models
+
+import ldap.dn
+
 class Command(BaseCommand):
     help = "Inititlise LDAP"
     
     def handle(self, **options):        
         verbose = int(options.get('verbosity'))
         
+        organizationalUnit = tldap.models.organizationalUnit
+
         from django.conf import settings
-        from placard.client import LDAPClient
-        import ldap
+
+        USER_DN = settings.LDAP_USER_BASE
+        OU, USER_OU, _ = ldap.dn.str2dn(USER_DN)[0][0]
+        user_defaults= { OU: USER_OU }
 
         GROUP_DN = settings.LDAP_GROUP_BASE
-        GROUP_OU = GROUP_DN.split(',')[0].split('=')[1]
-        USER_DN = settings.LDAP_USER_BASE
-        USER_OU = USER_DN.split(',')[0].split('=')[1]
+        OU, GROUP_OU, _ = ldap.dn.str2dn(GROUP_DN)[0][0]
+        group_defaults= { OU: GROUP_OU }
 
-        lcon = LDAPClient()
-        user_base_attrs = {
-            'objectClass': ['organizationalUnit',],
-            'ou': USER_OU,
-            }
-        
-        group_base_attrs = {
-            'objectClass': ['organizationalUnit',],
-            'ou': GROUP_OU,
-            }
-        try:
-            lcon.ldap_add(USER_DN, user_base_attrs)
+        v,c = organizationalUnit.objects.get_or_create(dn=USER_DN, defaults=user_defaults)
+        if c:
             print "Added " + USER_DN
-        except ldap.ALREADY_EXISTS:
+        else:
             print USER_DN + " already exists."
-        try:
-            lcon.ldap_add(GROUP_DN, group_base_attrs)
+
+        v,c = organizationalUnit.objects.get_or_create(dn=GROUP_DN, defaults=group_defaults)
+        if c:
             print "Added " + GROUP_DN
-        except ldap.ALREADY_EXISTS:
+        else:
             print GROUP_DN + " already exists."
+

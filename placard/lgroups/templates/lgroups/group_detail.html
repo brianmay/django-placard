@@ -1,4 +1,5 @@
 {% extends "main.html" %}
+{% load lusers %}
 
 {% block title %}LDAP Groups{% endblock %}
 
@@ -58,13 +59,25 @@
     <table cellspacing="0">
       <thead>
 	<tr>
-	  <th>User</th>
+	  <th>Primary Users</th>
 	</tr>
       </thead>   	
       <tbody>
-   	{% for m in member_list %}
+   	{% for m in group.primary_accounts.all %}
 	<tr class="{% cycle row1,row2 %}">
-	  <td><a href="{{ m.get_absolute_url }}" >{{ m }}</a></td>
+	  <td><a href="{% get_user_url m %}" >{{ m }}</a></td>
+	</tr>
+	{% endfor %}
+      </tbody>  	
+      <thead>
+	<tr>
+	  <th>Secondary Users</th>
+	</tr>
+      </thead>   	
+      <tbody>
+   	{% for m in group.secondary_accounts.all %}
+	<tr class="{% cycle row1,row2 %}">
+	  <td><a href="{% get_user_url m %}" >{{ m }}</a></td>
 	  {% if perms.auth.change_group %}<td><a href="remove/{{ m.uid }}/" class="deletelink">Remove</a></td>{% endif %}
 	</tr>
 	{% endfor %}

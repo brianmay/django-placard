@@ -14,11 +14,11 @@
 <div id="content-main">
 
 <div class="module">
-	<h3>{{ dn }}</h3>
+	<h3>{{ group.dn }}</h3>
    	<table>
-   	{% for i in lgroup %}
+   	{% for i,j in group.get_fields %}
    		<tr>
-				<td>{{ i.0 }}</td><td>{{ i.1 }}</td>
+				<td>{{ i }}</td><td>{{ j }}</td>
 			</tr>
 			<tr>
    	{% endfor %}
