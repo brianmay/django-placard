@@ -158,7 +158,7 @@ def send_members_email(request, group_id):
                     emails.append((subject, body, settings.DEFAULT_FROM_EMAIL, [member.mail]))
             if emails:
                 send_mass_mail(emails)
-            return HttpResponseRedirect(group.get_absolute_url())
+            return HttpResponseRedirect(reverse("plac_grp_detail",kwargs={ 'group_id': group.gidNumber }))
     else:
         form = EmailForm()
 
@@ -167,9 +167,8 @@ def send_members_email(request, group_id):
 
 @permission_required('auth.change_group')
 def rename_group(request, group_id):
-    conn = LDAPClient()
     try:
-        group = conn.get_group("gidNumber=%s" % group_id)
+        group =  placard.models.group.objects.get(gidNumber=group_id)
     except exceptions.DoesNotExistException:
         return HttpResponseNotFound()
 
@@ -177,7 +176,7 @@ def rename_group(request, group_id):
         form = RenameGroupForm(request.POST, group=group)
         if form.is_valid():
             form.save()
-            return HttpResponseRedirect(group.get_absolute_url())
+            return HttpResponseRedirect(reverse("plac_grp_detail",kwargs={ 'group_id': group.gidNumber }))
     else:
         form = RenameGroupForm(group=group)
         form.initial = {'name': group.cn}

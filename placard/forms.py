@@ -46,7 +46,7 @@ class PasswordResetForm(BasePasswordResetForm):
         Validates that a user exists with the given e-mail address.
         """
         sync_users()
-        luser_list = placard.models.account.objects.filter(mail=email):
+        luser_list = placard.models.account.objects.filter(mail=email)
         self.users_cache = User.objects.filter(username__in=[x.uid for x in luser_list])
         if len(self.users_cache) == 0:
             raise forms.ValidationError("That e-mail address doesn't have an associated user account. Are you sure you've registered?")

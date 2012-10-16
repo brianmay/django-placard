@@ -33,12 +33,6 @@ class BasicLDAPGroupForm(forms.Form):
 class AddGroupForm(forms.Form):
     add_group = forms.ChoiceField(choices=[('','--------------------')]+[(x.gidNumber, x.cn) for x in placard.models.group.objects.all()])
 
-    def save(self, uid):
-        conn = LDAPClient()
-        group = int(self.cleaned_data['add_group'])
-        conn.add_group_member('gidNumber=%s' % group, uid)
-        return group
-
 
 class RenameGroupForm(forms.Form):
     name = forms.CharField()
@@ -53,6 +47,5 @@ class RenameGroupForm(forms.Form):
         
     def save(self):
         name = self.cleaned_data['name']
-        conn = LDAPClient()
         group = self.group
-        conn.rename_group('gidNumber=%s' % group.gidNumber, name)
+        group.rename('cn', name)
