@@ -32,20 +32,15 @@ class Command(BaseCommand):
         from django.conf import settings
 
         USER_DN = settings.LDAP_USER_BASE
-        OU, USER_OU, _ = ldap.dn.str2dn(USER_DN)[0][0]
-        user_defaults= { OU: USER_OU }
-
         GROUP_DN = settings.LDAP_GROUP_BASE
-        OU, GROUP_OU, _ = ldap.dn.str2dn(GROUP_DN)[0][0]
-        group_defaults= { OU: GROUP_OU }
 
-        v,c = organizationalUnit.objects.get_or_create(dn=USER_DN, defaults=user_defaults)
+        v,c = organizationalUnit.objects.get_or_create(dn=USER_DN)
         if c:
             print "Added " + USER_DN
         else:
             print USER_DN + " already exists."
 
-        v,c = organizationalUnit.objects.get_or_create(dn=GROUP_DN, defaults=group_defaults)
+        v,c = organizationalUnit.objects.get_or_create(dn=GROUP_DN)
         if c:
             print "Added " + GROUP_DN
         else:
