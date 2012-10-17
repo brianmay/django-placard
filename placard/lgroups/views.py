@@ -20,7 +20,7 @@ from django.shortcuts import render_to_response
 from django.template import RequestContext, Context, Template
 from django.conf import settings
 from django.core.urlresolvers import reverse
-from django.http import HttpResponseRedirect, HttpResponseNotFound
+from django.http import HttpResponseRedirect, HttpResponseNotFound, Http404
 from django.contrib.auth.decorators import permission_required
 from django.template.loader import render_to_string
 from django.core.mail import send_mass_mail
@@ -44,21 +44,17 @@ def group_detail(request, group_id):
     try:
         group =  placard.models.group.objects.get(gidNumber=group_id)
     except placard.models.group.DoesNotExist:
-        return HttpResponseNotFound()
+        raise Http404
 
     if request.method == 'POST':
         # add member
-        form = AddMemberForm(request.POST)
+        form = AddMemberForm(request.POST, group=group)
         if form.is_valid():
-            try:
-                user = placard.models.account.objects.get(uid=form.cleaned_data['add_user'])
-            except placard.models.account.DoesNotExist:
-                return HttpResponseNotFound()
-            group.secondary_accounts.add(user)
+            form.save()
             messages.info(request, u'User %s has been added to group %s.' % (user, group))
             return HttpResponseRedirect(reverse("plac_grp_detail",kwargs={ 'group_id': group.gidNumber }))
     else:
-        form = AddMemberForm()
+        form = AddMemberForm(group=group)
 
     return render_to_response('lgroups/group_detail.html', locals(), context_instance=RequestContext(request))
 
@@ -68,16 +64,15 @@ def remove_member(request, group_id, user_id):
     try:
         group = placard.models.group.objects.get(gidNumber=group_id)
     except placard.models.group.DoesNotExist:
-        return HttpResponseNotFound()
+        raise Http404
 
     try:
         luser = placard.models.account.objects.get(uid=user_id)
     except placard.models.account.DoesNotExist:
-        return HttpResponseNotFound()
-
+        raise Http404
 
     if request.method == 'POST':
-        group.secondary_accounts.remove(luser)
+        group.secondary_people.remove(luser)
         messages.info(request, u"User %s removed from group %s" % (luser, group))
         return HttpResponseRedirect(reverse("plac_user_detail",kwargs={ 'username': luser.uid }))
 
@@ -88,19 +83,23 @@ def remove_member(request, group_id, user_id):
 def add_edit_group(request, group_id=None, form=BasicLDAPGroupForm):
     Form = form
 
-    try:
-        group = placard.models.group.objects.get(gidNumber=group_id)
-    except placard.models.group.DoesNotExist:
-        return HttpResponseNotFound()
+    if group_id is not None:
+        try:
+            group = placard.models.group.objects.get(gidNumber=group_id)
+        except placard.models.group.DoesNotExist:
+            raise Http404
+    else:
+        group = None
 
     if request.method == 'POST':
 
-        form = Form(request.POST)
+        form = Form(request.POST, group=group)
         if form.is_valid():
+            form.save()
             return HttpResponseRedirect(reverse('plac_grp_list'))
 
     else:
-        form = Form()
+        form = Form(group=group)
 
     return render_to_response('lgroups/group_form.html', locals(), context_instance=RequestContext(request))
    
@@ -110,7 +109,7 @@ def delete_group(request, group_id):
     try:
         group = placard.models.group.objects.get(gidNumber=group_id)
     except placard.models.group.DoesNotExist:
-        return HttpResponseNotFound()
+        raise Http404
 
     if request.method == 'POST':
         group.delete()
@@ -124,7 +123,7 @@ def group_detail_verbose(request, group_id):
     try:
         group =  placard.models.group.objects.get(gidNumber=group_id)
     except exceptions.DoesNotExistException:
-        return HttpResponseNotFound()
+        raise Http404
 
     return render_to_response('lgroups/group_detail_verbose.html', locals(), context_instance=RequestContext(request))
 
@@ -133,7 +132,7 @@ def send_members_email(request, group_id):
     try:
         group =  placard.models.group.objects.get(gidNumber=group_id)
     except exceptions.DoesNotExistException:
-        return HttpResponseNotFound()
+        raise Http404
 
     def list_all_people():
         for i in group.primary_accounts.all():
@@ -170,7 +169,7 @@ def rename_group(request, group_id):
     try:
         group =  placard.models.group.objects.get(gidNumber=group_id)
     except exceptions.DoesNotExistException:
-        return HttpResponseNotFound()
+        raise Http404
 
     if request.method == 'POST':
         form = RenameGroupForm(request.POST, group=group)
@@ -179,5 +178,4 @@ def rename_group(request, group_id):
             return HttpResponseRedirect(reverse("plac_grp_detail",kwargs={ 'group_id': group.gidNumber }))
     else:
         form = RenameGroupForm(group=group)
-        form.initial = {'name': group.cn}
     return render_to_response('lgroups/group_rename.html', {'form': form}, context_instance=RequestContext(request))

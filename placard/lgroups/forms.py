@@ -19,19 +19,44 @@ from django import forms
 
 import placard.models
 
+import django.http
+
 class BasicLDAPGroupForm(forms.Form):
     cn = forms.CharField(label='CN')
 
+    def __init__(self, *args, **kwargs):
+        self.group = kwargs.pop('group')
+        super(BasicLDAPGroupForm, self).__init__(*args, **kwargs)
+
     def clean_cn(self):
         cn = self.cleaned_data['cn']
-        groups = placard.models.group.filter(cn=cn)
+        groups = placard.models.group.objects.filter(cn=cn)
         if len(groups) > 0:
             raise forms.ValidationError("This group already exists!")
         return cn
 
+    def save(self):
+        if self.group is None:
+            group = placard.models.group()
+        else:
+            group = self.group
+        group.cn = self.cleaned_data['cn']
+        group.save()
+
 
 class AddGroupForm(forms.Form):
     add_group = forms.ChoiceField(choices=[('','--------------------')]+[(x.gidNumber, x.cn) for x in placard.models.group.objects.all()])
+
+    def __init__(self, *args, **kwargs):
+        self.account = kwargs.pop('account')
+        super(AddGroupForm, self).__init__(*args, **kwargs)
+
+    def save(self):
+        try:
+            group = placard.models.group.objects.get(gidNumber=self.cleaned_data['add_group'])
+        except placard.models.group.DoesNotExist:
+            raise django.http.Http404()
+        self.account.secondary_groups.add(group)
 
 
 class RenameGroupForm(forms.Form):
@@ -40,12 +65,12 @@ class RenameGroupForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.group = kwargs.pop('group')
         super(RenameGroupForm, self).__init__(*args, **kwargs)
-    
+        self.initial = { 'name': self.group.cn }
+
     def clean_name(self):
         name = self.cleaned_data['name']
         return name
-        
+
     def save(self):
         name = self.cleaned_data['name']
-        group = self.group
-        group.rename(cn=name)
+        self.group.rename(cn=name)

@@ -39,7 +39,7 @@ MIDDLEWARE_CLASSES = (
 )
 
 DATABASE_ENGINE = 'sqlite3'           # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
-DATABASE_NAME = 'placard.db'          # Or path to database file if using sqlite3.
+DATABASE_NAME = 'demo.db'          # Or path to database file if using sqlite3.
 DATABASE_USER = 'placard'             # Not used with sqlite3.
 DATABASE_HOST = 'db.vpac.org'         # Set to empty string for localhost. Not used with sqlite3.
 DATABASE_PORT = ''             # Set to empty string for default. Not used with sqlite3.

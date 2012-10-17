@@ -37,8 +37,8 @@ def user_list(request):
         try:
             group = placard.models.group.objects.get(gidNumber=request.GET['group'])
         except placard.models.group.DoesNotExist:
-            return HttpResponseNotFound()
-        user_list = group.secondary_accounts.all()
+            raise Http404
+        user_list = group.secondary_account.all()
     else:
         user_list = placard.models.account.objects.all()
 
@@ -65,17 +65,13 @@ def user_detail(request, username):
         raise Http404
 
     if request.method == 'POST':
-        form = AddGroupForm(request.POST)
+        form = AddGroupForm(request.POST, account=luser)
         if form.is_valid():
-            try:
-                group = placard.models.group.objects.get(gidNumber=form.cleaned_data['add_group'])
-            except placard.models.group.DoesNotExist:
-                return HttpResponseNotFound()
-            luser.secondary_groups.add(group)
+            form.save()
             messages.info(request, u'User %s has been added to group %s.' % (luser, group)) 
             return HttpResponseRedirect(reverse("plac_user_detail",kwargs={ 'username': luser.uid }))
     else:
-        form = AddGroupForm()
+        form = AddGroupForm(account=luser)
 
     return render_to_response('lusers/user_detail.html', locals(), context_instance=RequestContext(request))
 
@@ -86,28 +82,21 @@ def add_edit_user(request, username=None, form=BasicLDAPUserForm, template_name=
     if (request.user.username != username) and (not request.user.has_perm('auth.add_user')):
         return HttpResponseForbidden()
 
-    if username:
+    if username is not None:
         try:
             ldap_user = placard.models.account.objects.get(uid=username)
         except placard.models.account.DoesNotExist:
             raise Http404
     else:
-        ldap_user = placard.models.account()
+        ldap_user = None
 
     if request.method == 'POST':
-        form = UserForm(request.POST, request.FILES)
+        form = UserForm(request.POST, request.FILES, account=ldap_user)
         if form.is_valid():
-            ldap_user.givenName = form.cleaned_data['givenName']
-            ldap_user.sn = form.cleaned_data['sn']
-            ldap_user.save()
+            form.save()
             return HttpResponseRedirect(reverse("plac_user_detail",kwargs={ 'username': ldap_user.uid }))
     else:
-        if username:
-            form = UserForm()
-            form.initial['givenName'] = ldap_user.givenName
-            form.initial['sn'] = ldap_user.sn
-        else:
-            form = UserForm()
+        form = UserForm(account=ldap_user)
     
     return render_to_response(template_name, locals(), context_instance=RequestContext(request))
  
@@ -133,7 +122,7 @@ def change_password(request, username, password_form=LDAPAdminPasswordForm, temp
 
     if request.method == 'POST':
         
-        form = PasswordForm(request.POST)
+        form = PasswordForm(request.POST, account=ldap_user)
         if form.is_valid():
             data = form.cleaned_data
             ldap_user.change_password(data['new1'], settings.LDAP_PASSWD_SCHEME)
@@ -144,7 +133,7 @@ def change_password(request, username, password_form=LDAPAdminPasswordForm, temp
                 return HttpResponseRedirect(redirect_url)
             return HttpResponseRedirect(reverse('plac_user_detail', args=[username]))              
     else:
-        form = PasswordForm()
+        form = PasswordForm(account=ldap_user)
 
     return render_to_response(template, locals(), context_instance=RequestContext(request))
 
