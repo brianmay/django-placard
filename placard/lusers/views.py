@@ -38,7 +38,7 @@ def user_list(request):
             group = placard.models.group.objects.get(gidNumber=request.GET['group'])
         except placard.models.group.DoesNotExist:
             raise Http404
-        user_list = group.secondary_account.all()
+        user_list = group.secondary_accounts.all()
     else:
         user_list = placard.models.account.objects.all()
 
