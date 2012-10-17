@@ -48,4 +48,4 @@ class RenameGroupForm(forms.Form):
     def save(self):
         name = self.cleaned_data['name']
         group = self.group
-        group.rename('cn', name)
+        group.rename(cn=name)
